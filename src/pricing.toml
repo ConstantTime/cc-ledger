@@ -1,0 +1,126 @@
+# Snapshot of Anthropic API pricing — used as the embedded fallback baked
+# into the binary at build time.
+#
+# Runtime override lookup (in priority order):
+#   1. $CC_LEDGER_PRICING (path)
+#   2. ~/.cc-ledger/pricing.toml
+#   3. this file (compiled in)
+#
+# Source: https://platform.claude.com/docs/en/about-claude/pricing
+# Order does not matter at lookup time — the loader sorts by prefix length
+# descending so the most-specific match wins (e.g. claude-opus-4-7 beats
+# claude-opus-4 when resolving claude-opus-4-7-20260301).
+
+pricing_version = 1
+as_of           = "2026-05-02"
+source          = "https://platform.claude.com/docs/en/about-claude/pricing"
+
+# ─── Opus 4.5+ family ($5 input / $25 output) ──────────────────────────────
+[[models]]
+prefix                  = "claude-opus-4-7"
+input_per_mtok          = 5.00
+cache_write_5m_per_mtok = 6.25
+cache_write_1h_per_mtok = 10.00
+cache_read_per_mtok     = 0.50
+output_per_mtok         = 25.00
+
+[[models]]
+prefix                  = "claude-opus-4-6"
+input_per_mtok          = 5.00
+cache_write_5m_per_mtok = 6.25
+cache_write_1h_per_mtok = 10.00
+cache_read_per_mtok     = 0.50
+output_per_mtok         = 25.00
+
+[[models]]
+prefix                  = "claude-opus-4-5"
+input_per_mtok          = 5.00
+cache_write_5m_per_mtok = 6.25
+cache_write_1h_per_mtok = 10.00
+cache_read_per_mtok     = 0.50
+output_per_mtok         = 25.00
+
+# ─── Opus 4 / 4.1 family ($15 input / $75 output) ──────────────────────────
+[[models]]
+prefix                  = "claude-opus-4-1"
+input_per_mtok          = 15.00
+cache_write_5m_per_mtok = 18.75
+cache_write_1h_per_mtok = 30.00
+cache_read_per_mtok     = 1.50
+output_per_mtok         = 75.00
+
+[[models]]
+prefix                  = "claude-opus-4"
+input_per_mtok          = 15.00
+cache_write_5m_per_mtok = 18.75
+cache_write_1h_per_mtok = 30.00
+cache_read_per_mtok     = 1.50
+output_per_mtok         = 75.00
+
+# ─── Sonnet 4 family ───────────────────────────────────────────────────────
+[[models]]
+prefix                  = "claude-sonnet-4-6"
+input_per_mtok          = 3.00
+cache_write_5m_per_mtok = 3.75
+cache_write_1h_per_mtok = 6.00
+cache_read_per_mtok     = 0.30
+output_per_mtok         = 15.00
+
+[[models]]
+prefix                  = "claude-sonnet-4-5"
+input_per_mtok          = 3.00
+cache_write_5m_per_mtok = 3.75
+cache_write_1h_per_mtok = 6.00
+cache_read_per_mtok     = 0.30
+output_per_mtok         = 15.00
+
+[[models]]
+prefix                  = "claude-sonnet-4"
+input_per_mtok          = 3.00
+cache_write_5m_per_mtok = 3.75
+cache_write_1h_per_mtok = 6.00
+cache_read_per_mtok     = 0.30
+output_per_mtok         = 15.00
+
+# ─── Sonnet 3.7 (deprecated, still billable) ───────────────────────────────
+[[models]]
+prefix                  = "claude-sonnet-3-7"
+input_per_mtok          = 3.00
+cache_write_5m_per_mtok = 3.75
+cache_write_1h_per_mtok = 6.00
+cache_read_per_mtok     = 0.30
+output_per_mtok         = 15.00
+
+# ─── Haiku family ──────────────────────────────────────────────────────────
+[[models]]
+prefix                  = "claude-haiku-4-5"
+input_per_mtok          = 1.00
+cache_write_5m_per_mtok = 1.25
+cache_write_1h_per_mtok = 2.00
+cache_read_per_mtok     = 0.10
+output_per_mtok         = 5.00
+
+[[models]]
+prefix                  = "claude-haiku-3-5"
+input_per_mtok          = 0.80
+cache_write_5m_per_mtok = 1.00
+cache_write_1h_per_mtok = 1.60
+cache_read_per_mtok     = 0.08
+output_per_mtok         = 4.00
+
+# ─── Legacy ────────────────────────────────────────────────────────────────
+[[models]]
+prefix                  = "claude-opus-3"
+input_per_mtok          = 15.00
+cache_write_5m_per_mtok = 18.75
+cache_write_1h_per_mtok = 30.00
+cache_read_per_mtok     = 1.50
+output_per_mtok         = 75.00
+
+[[models]]
+prefix                  = "claude-haiku-3"
+input_per_mtok          = 0.25
+cache_write_5m_per_mtok = 0.30
+cache_write_1h_per_mtok = 0.50
+cache_read_per_mtok     = 0.03
+output_per_mtok         = 1.25

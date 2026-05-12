@@ -1,0 +1,30 @@
+#!/bin/sh
+# Auto-format staged Rust files via `cargo fmt --all` before commit.
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+
+set -e
+
+staged_rs=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' || true)
+[ -z "$staged_rs" ] && exit 0
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "pre-commit: cargo not found on PATH, skipping format" >&2
+  exit 0
+fi
+
+# Refuse if any staged file also has unstaged changes — auto-formatting +
+# re-staging would silently pull those unstaged hunks into the commit.
+mixed=$(git diff --name-only -- $staged_rs)
+if [ -n "$mixed" ]; then
+  echo "pre-commit: these files have both staged and unstaged changes:" >&2
+  echo "$mixed" | sed 's/^/  /' >&2
+  echo "stash or stage them fully so auto-format does not include unstaged work." >&2
+  exit 1
+fi
+
+cargo fmt --all
+
+# Re-stage in case fmt rewrote any of the originally-staged files.
+echo "$staged_rs" | xargs git add

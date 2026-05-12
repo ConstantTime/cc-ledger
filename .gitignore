@@ -1,0 +1,14 @@
+/target
+Cargo.lock.bak
+*.swp
+.DS_Store
+
+# Per-developer local-dev env overrides (sourced manually or via direnv).
+# Keep out of git so personal client IDs / endpoints don't leak.
+.envrc
+
+# menubar (Swift) build artifacts
+/menubar/.build/
+/menubar/MenuBar.app/
+/menubar/Package.resolved
+/menubar/.swiftpm/

@@ -1,0 +1,196 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  compute-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      tag: ${{ steps.compute.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute next version
+        id: compute
+        env:
+          BLOB_BASE: ${{ vars.BLOB_BASE }}
+        run: |
+          set -euo pipefail
+          [[ -n "${BLOB_BASE:-}" ]] || { echo "::error::repo variable BLOB_BASE is unset"; exit 1; }
+
+          # Read x.y from Cargo.toml ([package].version = "x.y.z")
+          xyz=$(awk -F'"' '/^\[package\]/{p=1} p && /^version[[:space:]]*=/{print $2; exit}' Cargo.toml)
+          if [[ ! "$xyz" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Cargo.toml version not parseable: '$xyz'"
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+
+          # Fetch previous published version from blob (404 → first release).
+          prev=""
+          if curl -fsSL --max-time 10 "${BLOB_BASE%/}/latest" -o latest.txt 2>/dev/null; then
+            prev=$(tr -d '[:space:]' < latest.txt)
+          fi
+
+          patch=0
+          if [[ -n "$prev" && "$prev" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            if [[ "${BASH_REMATCH[1]}" == "$major" && "${BASH_REMATCH[2]}" == "$minor" ]]; then
+              patch=$(( BASH_REMATCH[3] + 1 ))
+            fi
+          fi
+
+          version="${major}.${minor}.${patch}"
+          echo "previous=$prev"
+          echo "version=$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version"   >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: compute-version
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            runner: macos-14
+          - target: aarch64-apple-darwin
+            runner: macos-14
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install musl tools (Linux only)
+        if: contains(matrix.target, 'linux-musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Patch Cargo.toml + Cargo.lock version
+        shell: bash
+        env:
+          VERSION: ${{ needs.compute-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Cargo.toml: rewrite the version under [package].
+          awk -v v="$VERSION" '
+            /^\[package\]/ {p=1}
+            p && /^version[[:space:]]*=/ && !done {
+              print "version = \"" v "\""; done=1; next
+            }
+            { print }
+          ' Cargo.toml > Cargo.toml.new
+          mv Cargo.toml.new Cargo.toml
+          # Cargo.lock: rewrite the version line directly under [[package]] cc-ledger.
+          awk -v v="$VERSION" '
+            /^\[\[package\]\]$/ {in_pkg=1; is_target=0}
+            in_pkg && /^name = "cc-ledger"$/ {is_target=1}
+            in_pkg && is_target && /^version = / {
+              print "version = \"" v "\""; is_target=0; in_pkg=0; next
+            }
+            /^$/ {in_pkg=0; is_target=0}
+            { print }
+          ' Cargo.lock > Cargo.lock.new
+          mv Cargo.lock.new Cargo.lock
+          grep -E '^version' Cargo.toml | head -1
+          grep -A1 'name = "cc-ledger"' Cargo.lock | head -2
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Strip binary
+        run: strip "target/${{ matrix.target }}/release/cc-ledger" || true
+
+      - name: Package tarball
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tar -C "target/${{ matrix.target }}/release" -czf \
+            "dist/cc-ledger-${{ matrix.target }}.tar.gz" cc-ledger
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball-${{ matrix.target }}
+          path: dist/cc-ledger-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: [compute-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: tarball-*
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          ls -la
+          sha256sum *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install @vercel/blob
+        run: npm install --no-save @vercel/blob@1
+
+      - name: Upload artifacts to Vercel Blob
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          VERSION: ${{ needs.compute-version.outputs.version }}
+        run: node .github/workflows/publish-blob.mjs
+
+      - name: Tag commit
+        env:
+          TAG: ${{ needs.compute-version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Step summary
+        env:
+          VERSION: ${{ needs.compute-version.outputs.version }}
+        run: |
+          {
+            echo "## Released cc-ledger \`$VERSION\`"
+            echo
+            echo "Install:"
+            echo
+            echo "\`\`\`"
+            echo "curl -fsSL https://ccledger.dev/install | bash"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

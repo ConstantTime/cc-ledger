@@ -1,0 +1,30 @@
+name: menubar CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'menubar/**'
+      - '.github/workflows/menubar-ci.yml'
+  pull_request:
+    paths:
+      - 'menubar/**'
+      - '.github/workflows/menubar-ci.yml'
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: menubar
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build (debug)
+        run: swift build
+
+      - name: Build (release)
+        run: swift build -c release
