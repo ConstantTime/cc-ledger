@@ -28,7 +28,12 @@ public struct ClaudeCredentials: Sendable {
 
 public enum ClaudeCredentialsError: Error, LocalizedError {
     case notFound(triedFile: URL, keychainStatus: Int32?)
-    case invalidJSON
+    /// The blob isn't valid JSON at all — likely corruption.
+    case unreadableJSON
+    /// JSON parsed fine but has no `claudeAiOauth` key. Expected for users on
+    /// API keys / Vertex / Bedrock — Claude Code still writes a credentials
+    /// blob (e.g. for MCP OAuth tokens) but never populates `claudeAiOauth`.
+    case noClaudeAiOauth
     case missingAccessToken
 
     public var errorDescription: String? {
@@ -40,10 +45,26 @@ public enum ClaudeCredentialsError: Error, LocalizedError {
             }
             msg += "\nRun `claude` to log in."
             return msg
-        case .invalidJSON:
-            return "Could not parse Claude credentials JSON."
+        case .unreadableJSON:
+            return "Claude credentials blob is not valid JSON."
+        case .noClaudeAiOauth:
+            return "No Claude.ai OAuth token in credentials (API / Vertex / Bedrock mode)."
         case .missingAccessToken:
             return "claudeAiOauth.accessToken missing from credentials."
+        }
+    }
+
+    /// True when there is no Claude.ai OAuth token on the machine — either
+    /// no creds file, nothing usable in Keychain, or the credentials blob
+    /// exists but has no `claudeAiOauth` key. This is the expected state
+    /// for users on API keys, Vertex, or Bedrock — the subscription quota
+    /// endpoint simply doesn't apply, so the UI should degrade to a local-
+    /// ledger-only view rather than treating it as an error. Truly corrupt
+    /// JSON is NOT included — that should still surface as an error.
+    public var isNoSubscriptionAuth: Bool {
+        switch self {
+        case .notFound, .noClaudeAiOauth, .missingAccessToken: return true
+        case .unreadableJSON:                                  return false
         }
     }
 }
@@ -76,10 +97,20 @@ public enum ClaudeCredentialsStore {
     }
 
     private static func parse(data: Data, source: ClaudeCredentials.Source) throws -> ClaudeCredentials {
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let oauth = root["claudeAiOauth"] as? [String: Any]
-        else {
-            throw ClaudeCredentialsError.invalidJSON
+        let json: Any
+        do {
+            json = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            throw ClaudeCredentialsError.unreadableJSON
+        }
+        guard let root = json as? [String: Any] else {
+            throw ClaudeCredentialsError.unreadableJSON
+        }
+        guard let oauth = root["claudeAiOauth"] as? [String: Any] else {
+            // JSON is well-formed but has no claudeAiOauth — typical for
+            // API / Vertex / Bedrock users whose Keychain blob only carries
+            // MCP OAuth tokens.
+            throw ClaudeCredentialsError.noClaudeAiOauth
         }
         guard let accessToken = oauth["accessToken"] as? String, !accessToken.isEmpty else {
             throw ClaudeCredentialsError.missingAccessToken

@@ -56,6 +56,11 @@ struct UsageLabel: View {
                 Text(String(format: "%.0f%%", pct))
                     .monospacedDigit()
             }
+        } else if store.apiMode, let today = store.history?.today {
+            // API / Vertex / Bedrock — no rolling quota to chart. Surface
+            // today's API-rate spend from the local ledger instead.
+            Text(String(format: "$%.2f", today.totalCostUSD))
+                .monospacedDigit()
         } else if store.errorMessage != nil {
             Image(systemName: "exclamationmark.triangle")
         } else {
@@ -253,8 +258,12 @@ struct UsageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
-            Divider()
-            content
+            // No subscription-quota panel in API mode, so drop the divider/
+            // content pair entirely — the local-ledger sections take over.
+            if !store.apiMode {
+                Divider()
+                content
+            }
             // Active sessions temporarily hidden while we iterate on the
             // ledger-backed panels below — flip back to true to restore.
             if false, !store.activeSessions.isEmpty {
@@ -595,7 +604,10 @@ struct UsageView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Claude Usage").font(.headline)
-                if let plan = store.plan {
+                if store.apiMode {
+                    Text("API mode · costs at API billing rates")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if let plan = store.plan {
                     Text(plan.displayName).font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -608,7 +620,13 @@ struct UsageView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let err = store.errorMessage {
+        if store.apiMode {
+            // No subscription quota to render — the local-ledger sections
+            // below (activity, recent PRs, session/PR spend, usage history)
+            // carry the popover in this mode. EmptyView keeps the divider
+            // layout below tight.
+            EmptyView()
+        } else if let err = store.errorMessage {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Error").font(.subheadline.bold()).foregroundStyle(.red)
                 Text(err).font(.caption).foregroundStyle(.secondary)

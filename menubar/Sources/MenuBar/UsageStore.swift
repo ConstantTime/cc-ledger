@@ -12,6 +12,10 @@ final class UsageStore {
     var errorMessage: String?
     var isLoading = false
     var lastUpdated: Date?
+    /// True when no Claude.ai OAuth token is on the machine — user is on an
+    /// API key, Vertex, or Bedrock. The subscription quota endpoint doesn't
+    /// apply; UI falls back to local cc-ledger data only.
+    var apiMode: Bool = false
     var fiveHourSamples: [UtilizationSample] = []
     var activeSessions: [ActiveSession] = []
     var ledgerStatus: LedgerStatus = .unknown
@@ -39,11 +43,21 @@ final class UsageStore {
         do {
             let creds = try ClaudeCredentialsStore.load()
             plan = creds.plan
+            apiMode = false
             let result = try await client.fetch(accessToken: creds.accessToken)
             usage = result
             errorMessage = nil
             lastUpdated = Date()
             recordFiveHourSample(from: result)
+        } catch let err as ClaudeCredentialsError where err.isNoSubscriptionAuth {
+            // No Claude.ai OAuth token — user is on API / Vertex / Bedrock.
+            // Quota endpoint doesn't apply; the popover renders the local
+            // cc-ledger sections only.
+            apiMode = true
+            errorMessage = nil
+            usage = nil
+            plan = nil
+            lastUpdated = Date()
         } catch {
             errorMessage = error.localizedDescription
         }
