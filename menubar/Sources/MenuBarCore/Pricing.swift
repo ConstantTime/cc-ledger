@@ -50,12 +50,13 @@ public enum Pricing {
         "claude-sonnet-4-6":          .sonnet4x,
         "claude-sonnet-4-20250514":   .sonnet4x,
 
-        // Opus 4.5 / 4.6 / 4.7 — $5 / $25 / $6.25 / $0.50 per Mtok (current)
+        // Opus 4.5 / 4.6 / 4.7 / 4.8 — $5 / $25 / $6.25 / $0.50 per Mtok (current)
         "claude-opus-4-5":          .opus45,
         "claude-opus-4-5-20251101": .opus45,
         "claude-opus-4-6":          .opus45,
         "claude-opus-4-6-20260205": .opus45,
         "claude-opus-4-7":          .opus45,
+        "claude-opus-4-8":          .opus45,
 
         // Opus 4.0 / 4.1 (legacy) — $15 / $75 / $18.75 / $1.50 per Mtok
         "claude-opus-4-1":          .opus41,
